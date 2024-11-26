@@ -254,6 +254,22 @@ func TestReadAllTargets(t *testing.T) {
 			out: targets,
 		},
 		{
+			name: "JSONTargeter/multipart",
+			in: NewJSONTargeter(strings.NewReader(`
+				{"method": "POST", "url": "http://:6060/", "header": {"Content-Type": ["multipart/form-data"]}, "multipart": {"file": "file.jpg"}}
+			`), nil, nil),
+			out: []Target{
+				{
+					Method: "POST",
+					URL:    "http://:6060/",
+					Body:   nil,
+					Header: map[string][]string{
+						"Content-Type": {"multipart/form-data"},
+					},
+				},
+			},
+		},
+		{
 			name: "no targets",
 			in:   NewHTTPTargeter(strings.NewReader(""), nil, nil),
 			err:  ErrNoTargets,
@@ -268,7 +284,14 @@ func TestReadAllTargets(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			out, err := ReadAllTargets(tc.in)
-			if got, want := out, tc.out; !equal(got, want) {
+			got, want := out, tc.out
+			for i := range got {
+				if strings.HasPrefix(got[i].Header.Get("Content-Type"), "multipart/form-data") {
+					got[i].Header.Set("Content-Type", "multipart/form-data")
+					got[i].Body = nil
+				}
+			}
+			if !equal(got, want) {
 				t.Errorf("got targets: %#v, want %#v", got, want)
 			}
 
