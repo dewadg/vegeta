@@ -4,7 +4,13 @@
 package vegeta
 
 import (
+	"bytes"
+	"io"
+	"mime/multipart"
 	http "net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	jlexer "github.com/mailru/easyjson/jlexer"
 	jwriter "github.com/mailru/easyjson/jwriter"
@@ -82,6 +88,49 @@ func (t *jsonTarget) decode(in *jlexer.Lexer) {
 					in.WantComma()
 				}
 				in.Delim('}')
+			}
+		case "multipart":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				buf := bytes.NewBuffer(nil)
+				w := multipart.NewWriter(buf)
+
+				in.Delim('{')
+				for !in.IsDelim('}') {
+					key := in.String()
+
+					in.WantColon()
+					value := in.String()
+					if strings.HasPrefix(value, "@") {
+						filePath := strings.TrimPrefix(value, "@")
+
+						f, err := os.Open(filePath)
+						if err != nil {
+							return
+						}
+
+						formFile, err := w.CreateFormFile(key, filepath.Base(filePath))
+						if err != nil {
+							return
+						}
+
+						_, _ = io.Copy(formFile, f)
+					} else {
+						_ = w.WriteField(key, value)
+					}
+
+					in.WantComma()
+				}
+				in.Delim('}')
+
+				if t.Header == nil {
+					t.Header = make(http.Header)
+				}
+				t.Header.Set("Content-Type", w.FormDataContentType())
+
+				_ = w.Close()
+				t.Body = buf.Bytes()
 			}
 		default:
 			in.SkipRecursive()
