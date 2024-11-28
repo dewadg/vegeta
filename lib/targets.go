@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	jlexer "github.com/mailru/easyjson/jlexer"
 	jwriter "github.com/mailru/easyjson/jwriter"
 )
@@ -134,13 +135,21 @@ func NewJSONTargeter(src io.Reader, body []byte, header http.Header) Targeter {
 		*bufio.Reader
 		sync.Mutex
 	}
-	rd := reader{Reader: bufio.NewReader(src)}
 
 	return func(tgt *Target) (err error) {
 		if tgt == nil {
 			return ErrNilTarget
 		}
 
+		rawBody, err := io.ReadAll(src)
+		if err != nil {
+			return err
+		}
+
+		rawBodyString := string(rawBody)
+		rawBodyString = strings.ReplaceAll(rawBodyString, "{uuid}", uuid.NewString())
+
+		rd := reader{Reader: bufio.NewReader(strings.NewReader(rawBodyString))}
 		var jl jlexer.Lexer
 
 		rd.Lock()
